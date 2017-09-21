@@ -8,7 +8,7 @@ Jared Gruneiro
 
 Hannah Reed
 
-Mya Rios
+Mya R.
 
 Parker Timmerman
 
