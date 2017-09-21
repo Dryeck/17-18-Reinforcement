@@ -2,9 +2,14 @@
 2017-18 Reinforcement Learning Senior Design Project
 
 Team Members:
-Shruti Alavala
+Shruti Alavala 
+
 Jared Gruneiro
+
 Hannah Reed
+
 Mya Rios
+
 Parker Timmerman
+
 Michael Wynne
