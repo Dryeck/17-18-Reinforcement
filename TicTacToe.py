@@ -92,6 +92,7 @@ class Game(object):
 		self.p2 = p2
 		self.lastMove = self.p2
 		self.nextMove = self.p1
+		self.winner = None
 
 		self.p1.lastState = self.board.getState()
 		self.p2.lastState = self.board.getState()
@@ -145,14 +146,23 @@ class Game(object):
 				for j in range(3):
 						vals.append(st[i][j])
 
-		print("----------------------")
-		print("| " + str(vals[0]) + " | " +
-			  str(vals[1]) + " | " + str(vals[2]) + " |")
-		print("| " + str(vals[3]) + " | " +
-			  str(vals[4]) + " | " + str(vals[5]) + " |")
-		print("| " + str(vals[6]) + " | " +
-			  str(vals[7]) + " | " + str(vals[8]) + " |")
-		print("----------------------")
+		valsPretty = []
+		for item in vals:
+			if item is '':
+				valsPretty.append("      ")
+			elif type(item) is float:
+				valsPretty.append(" " + str(item) + "  ")
+			else:
+				valsPretty.append("  " + item + "   ")
+
+		print("---------------------------")
+		print("| " + valsPretty[0] + " | " +
+			  valsPretty[1] + " | " + valsPretty[2] + " |")
+		print("| " + str(valsPretty[3]) + " | " +
+			  valsPretty[4] + " | " + valsPretty[5] + " |")
+		print("| " + str(valsPretty[6]) + " | " +
+			  valsPretty[7] + " | " + valsPretty[8] + " |")
+		print("---------------------------")
 
 	def gameOver(self, status):
 		self.printBoard()
@@ -160,6 +170,10 @@ class Game(object):
 			print('Draw!')
 		else:
 			print("Game over! The winner was " + status)
+			if status is self.p1.marker:
+				self.winner = self.p1
+			else:
+				self.winner = self.p2
 
 	def start(self):
 		self.makeMove(self.nextMove)
@@ -167,12 +181,13 @@ class Game(object):
 class Agent(object):
 
 	#Alpha is the weight for backing up values, and epsilon is the chance of an exploratory move
-	def __init__(self, marker):
+	def __init__(self, marker, random=False):
 		self.stateValues = {}
 		self.epsilon = 0.2
 		self.alpha = 0.99
 		self.marker = marker
 		self.lastState = []
+		self.random=random
 
 	#Reduce the value of epsilon and alpha over time; After 10,000 games, alpha is <0.02
 	def updateVars(self):
@@ -237,7 +252,7 @@ class Agent(object):
 		for i in range(3):
 			for j in range(3):
 				if currentState[i][j] not in MARKERS:
-					move = (i, j)
+					move = (j, i)
 					possibilities.append(move)
 
 		choice = randint(0, len(possibilities) - 1)
@@ -247,7 +262,7 @@ class Agent(object):
 		y = move[1]
 
 		temp = copy.deepcopy(currentState)
-		temp[x][y] = self.marker
+		temp[y][x] = self.marker
 		self.lastState = temp
 
 		return x,y
@@ -257,12 +272,14 @@ class Agent(object):
 		rVal = randint(1,100)
 		decrVal = float(rVal) / 100
 
-		if decrVal <= self.epsilon:
+		if self.random:
+			x,y = self.exploratoryMove(currentState)
+		elif decrVal <= self.epsilon:
 			x,y = self.exploratoryMove(currentState)
 		else:
 			x,y = self.greedyMove(currentState)
 
-			self.updateVars()
+		self.updateVars()
 		return x,y
 
 class Human(object):
@@ -280,13 +297,26 @@ class Human(object):
 def main():
 	p1 = Agent(MARKERS[0])
 	p2 = Agent(MARKERS[1])
+	r2 = Agent(MARKERS[1], True)
+
+	currentp1Wins = 0
+	p1Wins = []
+	keepTrackStep = 1000
 	roundNum = 0
-	totalRounds = 10000
+	totalRounds = 100000
+	
 	while roundNum < totalRounds:
 		print("Round: " + str(roundNum) + ": ")
-		game = Game(p1, p2)
+		game = Game(p1, r2)
 		game.start()
+		if game.winner is p1:
+			currentp1Wins += 1
 		roundNum += 1
+		if roundNum % keepTrackStep is 0:
+			p1Wins.append(currentp1Wins)
+			currentp1Wins = 0
+	for i in range(totalRounds / keepTrackStep):
+		print("In games " + str(i * keepTrackStep) + "-" + str((i+1) * keepTrackStep) + ", p1 won " + str(p1Wins[i]) + " games, which is " + str(float(p1Wins[i]) / keepTrackStep) + "%")
 	p2 = Human(MARKERS[1])
 
 	while True:
