@@ -15,6 +15,7 @@ class Board(object):
 		self.state = []
 		self.newBoard()
 
+	# For testing, shouldn't be used, prefer to use the printBoard method in the Game class
 	def printBoard(self):
 		print("-------------------------------------------------------------------------------------------------------")
 		for i in range(15):
@@ -41,17 +42,106 @@ class Board(object):
 		if marker in MARKERS and self.state[y][x] not in MARKERS:
 			self.state[y][x] = marker
 
-	# Returns winner's marker if there is a winner, None if the game can
-	# continue, and 'Draw' if it is a tie.
+	# Returns winner's marker if there is a winner, and None if the game can continue.  The function
+	# looks at each spot on the board, and if its not null, checks in all surrounding directions
+	# to see if it is part of a 5 (or more) in a row.
 	def checkForWin(self):
+		for i in range(15):
+			for j in range(15):
+				if self.state[i][j] in MARKERS:
+					marker = self.state[i][j]
+					horzCount = 0
+					vertCount = 0
+					topLeftDiagCount = 0
+					botLeftDiagCount = 0
+					top = i - 1
+					bot = i + 1
+					left = j - 1
+					right = j + 1
+					#Top left i, top left j, top right i, etc...
+					tlI = i - 1
+					tlJ = j - 1
+					trI = i - 1
+					trJ = j + 1
+					blI = i + 1
+					blJ = j - 1
+					brI = i + 1
+					brJ = j + 1
+
+					#Check vertical
+					while top > -1:
+						if self.state[top][j] is marker:
+							vertCount += 1
+							top -= 1
+						else:
+							break
+					while bot < 15:
+						if self.state[bot][j] is marker:
+							vertCount += 1
+							bot += 1
+						else:
+							break
+
+					if vertCount >= 4:
+						return marker
+
+					#Check horizontal
+					while left > -1:
+						if self.state[i][left] is marker:
+							horzCount += 1
+							left -= 1
+						else:
+							break
+					while right < 15:
+						if self.state[i][right] is marker:
+							horzCount += 1
+							right += 1
+						else:
+							break
+
+					if horzCount >= 4:
+						return marker
+
+					#Check diagonal (top left to bottom right)
+					while tlI > 0 and tlJ > 0:
+						if self.state[tlI][tlJ] is marker:
+							topLeftDiagCount += 1
+							tlI -= 1
+							tlJ -= 1
+						else:
+							break
+					while brI < 15 and brJ < 15:
+						if self.state[brI][brJ] is marker:
+							topLeftDiagCount += 1
+							brI += 1
+							brJ += 1
+						else:
+							break
+
+					if topLeftDiagCount >= 4:
+						return marker
+
+					#Check diagonal (bottom left to top right)
+					while blI < 15 and blJ > 0:
+						if self.state[blI][blJ] is marker:
+							botLeftDiagCount += 1
+							blI += 1
+							blJ -= 1
+						else:
+							break
+					while trI > 0 and trJ < 15:
+						if self.state[trI][trJ] is marker:
+							botLeftDiagCount += 1
+							trI -= 1
+							trJ += 1
+						else:
+							break
+
+					if botLeftDiagCount >= 4:
+						return marker
+
 		return None
-		#TODO
-		#if winner:
-		#	return winner.marker
-		#elif draw:
-		#	return "DRAW"
-		#else:
-		#	return None
+
 class Game(object):
 
 	def __init__(self, p1, p2):
@@ -96,12 +186,12 @@ class Game(object):
 	def printBoard(self):
 		st = self.board.getState()
 
-		print("-------------------------------------------------")
+		print("-------------------------------------------------------------------------------------------------------")
 		for i in range(15):
 			for j in range(15):
-				print("| " + st[i][j] + " | ")
-			print("\n")
-		print("-------------------------------------------------")
+				print("| " + st[i][j] + " | "),
+			print("")
+		print("-------------------------------------------------------------------------------------------------------")
 
 	def gameOver(self, status):
 		self.printBoard()
@@ -218,12 +308,13 @@ class Agent(object):
 		rVal = randint(1,100)
 		decrVal = float(rVal) / 100
 
-		if self.random:
-			x,y = self.exploratoryMove(currentState)
-		elif decrVal <= self.epsilon:
-			x,y = self.exploratoryMove(currentState)
-		else:
-			x,y = self.greedyMove(currentState)
+		# if self.random:
+		# 	x,y = self.exploratoryMove(currentState)
+		# elif decrVal <= self.epsilon:
+		# 	x,y = self.exploratoryMove(currentState)
+		# else:
+		# 	x,y = self.greedyMove(currentState)
+		x,y = self.exploratoryMove(currentState)
 
 		self.updateVars()
 		return x,y
@@ -234,22 +325,17 @@ class Human(object):
 		self.marker = marker
 
 	#Humans input a move in the form of 0,1 where 0 is the row and 1 is the column
-	def chooseMove(self):
+	def chooseMove(self,  currentState):
 		move = input('Move: ')
 		x = move[0]
 		y = move[1]
 		return x,y
 
 def main():
-	board = Board()
-	board.place('X', 5, 10)
-	board.printBoard()
-
-	player = Human('X')
-
 	while True:
-		x,y = player.chooseMove()
-		board.place('X', x, y)
-		board.printBoard()
+		p1 = Human('X')
+		p2 = Agent('O')
+		game = Game(p1, p2)
+		game.start()
 
 main()
