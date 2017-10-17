@@ -8,6 +8,8 @@ MARKERS = ['X', 'O']
 from random import randint
 import copy
 import ast
+from math import floor
+import time
 
 class Board(object):
 
@@ -90,12 +92,17 @@ class Game(object):
 		self.board = Board()
 		self.p1 = p1
 		self.p2 = p2
-		self.lastMove = self.p2
-		self.nextMove = self.p1
+		self.lastMove, self.nextMove = self.chooseFirst(self.p1, self.p2)
 		self.winner = None
 
 		self.p1.lastState = self.board.getState()
 		self.p2.lastState = self.board.getState()
+
+	def chooseFirst(self, p1, p2):
+		random = randint(0,1)
+		if random is 0:
+			return p1, p2
+		return p2, p1
 
 	#Tells the designated player to make a move
 	def makeMove(self, player):
@@ -165,15 +172,18 @@ class Game(object):
 		print("---------------------------")
 
 	def gameOver(self, status):
-		self.printBoard()
-		if status is 'Draw':
-			print('Draw!')
-		else:
-			print("Game over! The winner was " + status)
-			if status is self.p1.marker:
-				self.winner = self.p1
+		if not(isinstance(self.p1, Agent) and isinstance(self.p2, Agent)):
+			self.printBoard()
+			if status is 'Draw':
+				print('Draw!')
 			else:
-				self.winner = self.p2
+				print("Game over! The winner was " + status)
+
+
+		if status is self.p1.marker:
+			self.winner = self.p1
+		elif status is self.p2.marker:
+			self.winner = self.p2
 
 	def start(self):
 		self.makeMove(self.nextMove)
@@ -183,7 +193,7 @@ class Agent(object):
 	#Alpha is the weight for backing up values, and epsilon is the chance of an exploratory move
 	def __init__(self, marker, random=False):
 		self.stateValues = {}
-		self.epsilon = 0.2
+		self.epsilon = 0.1
 		self.alpha = 0.99
 		self.marker = marker
 		self.lastState = []
@@ -300,23 +310,46 @@ def main():
 	r2 = Agent(MARKERS[1], True)
 
 	currentp1Wins = 0
+	currentDraws = 0
 	p1Wins = []
+	p1States = []
+	draws = []
 	keepTrackStep = 1000
 	roundNum = 0
-	totalRounds = 100000
-	
+	totalRounds = 5000
+	percent = totalRounds / 100
+	printCount = -1
+	estTime = 0
+	lastTime = time.time()
+
 	while roundNum < totalRounds:
-		print("Round: " + str(roundNum) + ": ")
+		if roundNum % percent is 0:
+			printCount += 1
+			if printCount is 5:
+				curTime = time.time()
+				estTime = curTime - lastTime
+				lastTime = curTime
+				multFactor = (totalRounds - roundNum) / (percent * 5)
+				estRemaining = estTime * multFactor
+				print(str(floor(roundNum / percent)) + "% done. " + "Time remaining: ~" + str(floor(estRemaining * 100) / 100) + " seconds")
+				printCount = 0
 		game = Game(p1, r2)
 		game.start()
 		if game.winner is p1:
 			currentp1Wins += 1
+		elif game.winner is None:
+			currentDraws += 1
 		roundNum += 1
 		if roundNum % keepTrackStep is 0:
 			p1Wins.append(currentp1Wins)
+			p1States.append(str(len(p1.stateValues)))
+			draws.append(currentDraws)
+			currentDraws = 0
 			currentp1Wins = 0
 	for i in range(totalRounds / keepTrackStep):
 		print("In games " + str(i * keepTrackStep) + "-" + str((i+1) * keepTrackStep) + ", p1 won " + str(p1Wins[i]) + " games, which is " + str(float(p1Wins[i]) / keepTrackStep) + "%")
+		print("There were " + str(draws[i]) + " draws.")
+		print("Total number of states seen: " + str(p1States[i]))
 	p2 = Human(MARKERS[1])
 
 	while True:
