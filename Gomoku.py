@@ -290,14 +290,14 @@ def findFeatures(state, p1Marker, p2Marker):
 						else:
 							p2BOpenFour += 1
 					#Broken Open four to the upper right
-					if i > 4:
+					if i > 4 and i < 14:
 						if (state[i][j] == state[i-2][j+2] == state[i-3][j+3] == state[i-4][j+4] and state[i-1][j+1] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-3][j+3] == state[i-4][j+4] and state[i-2][j+2] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-4][j+4] and state[i-3][j+3] not in MARKERS) and state[i+1][j-1] not in MARKERS and state[i-5][j+5] not in MARKERS:
 							if state[i][j] == p1Marker:
 								p1BOpenFour += 1
 							else:
 								p2BOpenFour += 1
 					#Broken Open four to the lower right
-					if i < 10:
+					if i < 10 and i > 0:
 						if (state[i][j] == state[i+2][j+2] == state[i+3][j+3] == state[i+4][j+4] and state[i+1][j+1] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+3][j+3] == state[i+4][j+4] and state[i+2][j+2] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+4][j+4] and state[i+3][j+3] not in MARKERS) and state[i-1][j-1] not in MARKERS and state[i+5][j+5] not in MARKERS:
 							if state[i][j] == p1Marker:
 								p1BOpenFour += 1
@@ -470,14 +470,14 @@ def findFeatures(state, p1Marker, p2Marker):
 						else:
 							p2BOpenThree += 1
 					#Broken Open Three to the upper right
-					if i > 3:
+					if i > 3 and i < 14:
 						if (state[i][j] == state[i-2][j+2] == state[i-3][j+3] and state[i-1][j+1] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-3][j+3] and state[i-2][j+2] not in MARKERS) and state[i+1][j-1] not in MARKERS and state[i-4][j+4] not in MARKERS:
 							if state[i][j] == p1Marker:
 								p1BOpenThree += 1
 							else:
 								p2BOpenThree += 1
 					#Broken Open Three to the lower right
-					if i < 11:
+					if i < 11 and i > 0:
 						if (state[i][j] == state[i+2][j+2] == state[i+3][j+3] and state[i+1][j+1] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+3][j+3] and state[i+2][j+2] not in MARKERS) and state[i-1][j-1] not in MARKERS and state[i+4][j+4] not in MARKERS:
 							if state[i][j] == p1Marker:
 								p1BOpenThree += 1
@@ -627,12 +627,14 @@ class Agent(object):
 		self.marker = marker
 		self.lastState = []
 		self.random=random
+		self.lastFeatures = {}
+		self.lastValue = 0
 
-	#Figure out how to approximate states
+	#Take a state, and determine a value for it based on feature presence and coefficients.
 	def approximateStateValue(self, featureDict):
 		#I made these up
 		coeffsDict = {}
-		coeffsDict['p1OpenFour'] = 5
+		coeffsDict['p1OpenFour'] = 10
 		coeffsDict['p1BOpenFour'] = 1
 		coeffsDict['p1HOpenFour'] = .8
 		coeffsDict['p1OpenThree'] = 1
@@ -694,6 +696,9 @@ class Agent(object):
 
 		x = possibilities[maxState]['x']
 		y = possibilities[maxState]['y']
+
+		self.lastValue = possibilities[maxState]['value']
+		self.lastFeatures = featureDict
 		return x,y
 
 	#Make a random, exploratory move
