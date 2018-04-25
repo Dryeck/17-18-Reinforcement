@@ -9,18 +9,21 @@ from random import randint
 import copy
 import ast
 import random
+import numpy as np
 
 class Board(object):
 
 	def __init__(self):
+		self.dim = 15
 		self.state = []
 		self.newBoard()
+		self.inARow = 5
 
 	# For testing, shouldn't be used, prefer to use the printBoard method in the Game class
 	def printBoard(self):
 		print("-------------------------------------------------------------------------------------------------------")
-		for i in range(15):
-			for j in range(15):
+		for i in range(0, self.dim):
+			for j in range(0, self.dim):
 				print("| " + self.state[i][j] + " | "),
 			print("")
 		print("-------------------------------------------------------------------------------------------------------")
@@ -28,9 +31,9 @@ class Board(object):
 	#Clear Board
 	def newBoard(self):
 		self.state = []
-		for i in range(15):
+		for i in range(0, self.dim):
 			row = []
-			for j in range(15):
+			for j in range(0, self.dim):
 				row.append(' ')
 			self.state.append(row)
 
@@ -40,6 +43,8 @@ class Board(object):
 
 	#Place a marker on the board (make a move)
 	def place(self, marker, x, y):
+		x = (int)(x)
+		y = (int)(y)
 		if marker in MARKERS and self.state[y][x] not in MARKERS:
 			self.state[y][x] = marker
 
@@ -47,14 +52,14 @@ class Board(object):
 	# looks at each spot on the board, and if its not null, checks in all surrounding directions
 	# to see if it is part of a 5 (or more) in a row.
 	def checkForWin(self):
-		for i in range(15):
-			for j in range(15):
+		for i in range(self.dim):
+			for j in range(self.dim):
 				if self.state[i][j] in MARKERS:
 					marker = self.state[i][j]
-					horzCount = 0
-					vertCount = 0
-					topLeftDiagCount = 0
-					botLeftDiagCount = 0
+					horzCount = 1
+					vertCount = 1
+					topLeftDiagCount = 1
+					botLeftDiagCount = 1
 					top = i - 1
 					bot = i + 1
 					left = j - 1
@@ -76,14 +81,14 @@ class Board(object):
 							top -= 1
 						else:
 							break
-					while bot < 15:
+					while bot < self.dim:
 						if self.state[bot][j] is marker:
 							vertCount += 1
 							bot += 1
 						else:
 							break
 
-					if vertCount >= 4:
+					if vertCount >= self.inARow:
 						return marker
 
 					#Check horizontal
@@ -93,14 +98,14 @@ class Board(object):
 							left -= 1
 						else:
 							break
-					while right < 15:
+					while right < self.dim:
 						if self.state[i][right] is marker:
 							horzCount += 1
 							right += 1
 						else:
 							break
 
-					if horzCount >= 4:
+					if horzCount >= self.inARow:
 						return marker
 
 					#Check diagonal (top left to bottom right)
@@ -111,7 +116,7 @@ class Board(object):
 							tlJ -= 1
 						else:
 							break
-					while brI < 15 and brJ < 15:
+					while brI < self.dim and brJ < self.dim:
 						if self.state[brI][brJ] is marker:
 							topLeftDiagCount += 1
 							brI += 1
@@ -119,18 +124,18 @@ class Board(object):
 						else:
 							break
 
-					if topLeftDiagCount >= 4:
+					if topLeftDiagCount >= self.inARow:
 						return marker
 
 					#Check diagonal (bottom left to top right)
-					while blI < 15 and blJ > 0:
+					while blI < self.dim and blJ > 0:
 						if self.state[blI][blJ] is marker:
 							botLeftDiagCount += 1
 							blI += 1
 							blJ -= 1
 						else:
 							break
-					while trI > 0 and trJ < 15:
+					while trI > 0 and trJ < self.dim:
 						if self.state[trI][trJ] is marker:
 							botLeftDiagCount += 1
 							trI -= 1
@@ -138,10 +143,151 @@ class Board(object):
 						else:
 							break
 
-					if botLeftDiagCount >= 4:
+					if botLeftDiagCount >= self.inARow:
 						return marker
 
 		return None
+
+#alphaBoard is the format that the board needs to be in to be processed by the NN agent
+class alphaBoard(object):
+    """board for the game"""
+
+    def __init__(self, **kwargs):
+        self.width = int(kwargs.get('width', 15))
+        self.height = int(kwargs.get('height', 15))
+        # board states stored as a dict,
+        # key: move as location on the board,
+        # value: player as pieces type
+        self.states = {}
+        # need how many pieces in a row to win
+        self.n_in_row = int(kwargs.get('n_in_row', 5))
+        self.players = [1, 2]  # player1 and player2
+
+    def init_board(self, start_player=0):
+        if self.width < self.n_in_row or self.height < self.n_in_row:
+            raise Exception('board width and height can not be '
+                            'less than {}'.format(self.n_in_row))
+        self.current_player = self.players[start_player]  # start player
+        # keep available moves in a list
+        self.availables = list(range(self.width * self.height))
+        self.states = {}
+        self.last_move = -1
+
+    def move_to_location(self, move):
+        """
+        3*3 board's moves like:
+        6 7 8
+        3 4 5
+        0 1 2
+        and move 5's location is (1,2)
+        """
+        h = move // self.width
+        w = move % self.width
+        return [h, w]
+
+    def location_to_move(self, location):
+        if(len(location) != 2):
+            return -1
+        h = location[0]
+        w = location[1]
+        move = h * self.width + w
+        if(move not in range(self.width * self.height)):
+            return -1
+        return move
+
+    def current_state(self):
+        """return the board state from the perspective of the current player.
+        state shape: 4*width*height
+        """
+
+        square_state = np.zeros((4, self.width, self.height))
+        if self.states:
+            moves, players = np.array(list(zip(*self.states.items())))
+            move_curr = moves[players == self.current_player]
+            move_oppo = moves[players != self.current_player]
+            square_state[0][move_curr // self.width,
+                            move_curr % self.height] = 1.0
+            square_state[1][move_oppo // self.width,
+                            move_oppo % self.height] = 1.0
+            # indicate the last move location
+            square_state[2][self.last_move // self.width,
+                            self.last_move % self.height] = 1.0
+        if len(self.states) % 2 == 0:
+            square_state[3][:, :] = 1.0  # indicate the colour to play
+        return square_state[:, ::-1, :]
+
+    def do_move(self, move):
+        self.states[move] = self.current_player
+        self.availables.remove(move)
+        self.current_player = (
+            self.players[0] if self.current_player == self.players[1]
+            else self.players[1]
+        )
+        self.last_move = move
+
+    def has_a_winner(self):
+        width = self.width
+        height = self.height
+        states = self.states
+        n = self.n_in_row
+
+        moved = list(set(range(width * height)) - set(self.availables))
+        if(len(moved) < self.n_in_row + 2):
+            return False, -1
+
+        for m in moved:
+            h = m // width
+            w = m % width
+            player = states[m]
+
+            if (w in range(width - n + 1) and
+                    len(set(states.get(i, -1) for i in range(m, m + n))) == 1):
+                return True, player
+
+            if (h in range(height - n + 1) and
+                    len(set(states.get(i, -1) for i in range(m, m + n * width, width))) == 1):
+                return True, player
+
+            if (w in range(width - n + 1) and h in range(height - n + 1) and
+                    len(set(states.get(i, -1) for i in range(m, m + n * (width + 1), width + 1))) == 1):
+                return True, player
+
+            if (w in range(n - 1, width) and h in range(height - n + 1) and
+                    len(set(states.get(i, -1) for i in range(m, m + n * (width - 1), width - 1))) == 1):
+                return True, player
+
+        return False, -1
+
+    def game_end(self):
+        """Check whether the game is ended or not"""
+        win, winner = self.has_a_winner()
+        if win:
+            return True, winner
+        elif not len(self.availables):
+            return True, -1
+        return False, -1
+
+    def get_current_player(self):
+        return self.current_player
+
+#Take the board given and turn it into an alphaBoard to be processed by the NN agent
+def convertBoard(oldBoard, lastX, lastY):
+	newBoard = alphaBoard(width=oldBoard.dim, height=oldBoard.dim, n_in_row=oldBoard.inARow)
+	newBoard.init_board(1)
+	lastLocation = (oldBoard.dim - 1 - lastY) * oldBoard.dim + lastX
+	newBoard.last_move = lastLocation
+	# print(str(newBoard.availables))
+	#Convert X's and O's on the board to 1's and 2's
+	for i in range(oldBoard.dim - 1, -1, -1):
+		for j in range(0, oldBoard.dim):
+			location = (oldBoard.dim - i - 1) * oldBoard.dim + j
+			if oldBoard.state[i][j] is 'X':
+				newBoard.states[location] = 1
+				newBoard.availables.remove(location)
+			elif oldBoard.state[i][j] is 'O':
+				newBoard.states[location] = 2
+				newBoard.availables.remove(location)
+	return newBoard
 
 class Game(object):
 
@@ -153,29 +299,25 @@ class Game(object):
 		self.nextMove = self.p1
 		self.winner = None
 
-		self.p1.lastState = self.board.getState()
-		self.p2.lastState = self.board.getState()
-
-		self.p1.lastFeatures = findFeatures(self.board.getState(), self.p1.marker, self.p2.marker)
-		self.p2.lastFeatures = findFeatures(self.board.getState(), self.p2.marker, self.p1.marker)
-
 	#Tells the designated player to make a move
-	def makeMove(self, player, x=None, y=None):
-		#Print each turn only when a human is playing to reduce spam
-		# if not(isinstance(self.p1, Agent) and isinstance(self.p2, Agent)):
-		# 	self.printBoard()
-		if isinstance(player, Agent):
-			x, y = player.chooseMove(self.board.getState(), self.board)
-		if x is -1 and y is -1:
-			self.gameOver('Draw')
-			return 'Draw', x, y
-		self.board.place(player.marker, x, y)
+	def makeMove(self, player, lastX=None, lastY=None):
+		x, y = -1, -1
+		if isinstance(player, Human):
+			self.board.place(player.marker, lastX, lastY)
+		else:
+			alphaB = convertBoard(self.board, lastX, lastY)
+			location = player.chooseMove(alphaB)
+			x = location % self.board.dim
+			y = (int)(self.board.dim - 1 - ((location - x) / self.board.dim))
+			print("placing at " + str(x) + " and " + str(y))
+			self.board.place(player.marker, x, y)
 
 		#Update whose turn it is
 		self.nextMove = self.lastMove
 		self.lastMove = player
 
 		#Check if the game was won, tied, or can continue
+		self.printBoard()
 		result = self.board.checkForWin()
 
 		#If there is a winner, update value functions for any that were agents.
@@ -190,18 +332,18 @@ class Game(object):
 	def printBoard(self):
 		st = self.board.getState()
 		print("   ", end="")
-		for i in range(15):
+		for i in range(self.board.dim):
 			if i < 10:
 				print("  " + str(i) + "   ", end="")
 			else:
 				print("  " + str(i) + "  ", end="")
 		print("")
 		print("   -----------------------------------------------------------------------------------------")
-		for i in range(15):
+		for i in range(self.board.dim):
 			print(str(i) + " ", end="")
 			if i < 10:
 				print(" ", end="")
-			for j in range(15):
+			for j in range(self.board.dim):
 				print("| " + st[i][j] + " | ", end=""),
 			print(" " + str(i), end="")
 			print("")
@@ -225,477 +367,477 @@ class Game(object):
 	def start(self):
 		self.makeMove(self.nextMove)
 
-def findFeatures(state, p1Marker, p2Marker):
+# def findFeatures(state, p1Marker, p2Marker):
 
-	p1Five = 0
-	p2Five = 0
+# 	p1Five = 0
+# 	p2Five = 0
 
-	p1OpenFour = 0
-	p2OpenFour = 0
+# 	p1OpenFour = 0
+# 	p2OpenFour = 0
 
-	p1HOpenFour = 0
-	p2HOpenFour = 0
+# 	p1HOpenFour = 0
+# 	p2HOpenFour = 0
 
-	p1BOpenFour = 0
-	p2BOpenFour = 0
+# 	p1BOpenFour = 0
+# 	p2BOpenFour = 0
 
-	p1BHOpenFour = 0
-	p2BHOpenFour = 0
+# 	p1BHOpenFour = 0
+# 	p2BHOpenFour = 0
 
-	p1OpenThree = 0
-	p2OpenThree = 0
+# 	p1OpenThree = 0
+# 	p2OpenThree = 0
 
-	p1HOpenThree = 0
-	p2HOpenThree = 0
+# 	p1HOpenThree = 0
+# 	p2HOpenThree = 0
 
-	p1BOpenThree = 0
-	p2BOpenThree = 0
+# 	p1BOpenThree = 0
+# 	p2BOpenThree = 0
 
-	p1BHOpenThree = 0
-	p2BHOpenThree = 0
+# 	p1BHOpenThree = 0
+# 	p2BHOpenThree = 0
 
-	p1OpenTwo = 0
-	p2OpenTwo = 0
+# 	p1OpenTwo = 0
+# 	p2OpenTwo = 0
 
-	for i in range(0, 15):
-		for j in range(0, 15):
-			if state[i][j] in MARKERS:
+# 	for i in range(0, 15):
+# 		for j in range(0, 15):
+# 			if state[i][j] in MARKERS:
 
-				#FIVES
-				#Five to the bottom
-				if i < 11:
-					if state[i][j] == state[i+1][j] == state[i+2][j] == state[i+3][j] == state[i+4][j]:
-						if state[i][j] == p1Marker:
-							p1Five +=1
-						else:
-							p2Five +=1
-				#Five to the right
-				if j < 11:
-					if state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+3] == state[i][j+4]:
-						if state[i][j] == p1Marker:
-							p1Five +=1
-						else:
-							p2Five +=1
-				#Five to the upper right
-				if i > 3 and j < 11:
-					if state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] == state[i-4][j+4]:
-						if state[i][j] == p1Marker:
-							p1Five +=1
-						else:
-							p2Five +=1
-				#Five to the lower right
-				if i < 11 and j < 11:
-					if state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] == state[i+4][j+4]:
-						if state[i][j] == p1Marker:
-							p1Five +=1
-						else:
-							p2Five +=1
-				#OPEN FOURS
-				if i > 0 and i < 11:
-					#Open Four to the bottom
-					if state[i][j] == state[i+1][j] == state[i+2][j] == state[i+3][j] and state[i-1][j] not in MARKERS and state[i+4][j] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1OpenFour += 1
-						else:
-							p2OpenFour += 1
-				if j < 11 and j > 0:
-					#Open Four to the right
-					if state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+3] and state[i][j-1] not in MARKERS and state[i][j+4] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1OpenFour += 1
-						else:
-							p2OpenFour += 1
-					#Open Four to the upper right
-					if i > 3 and i < 14:
-						if state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] and state[i+1][j-1] not in MARKERS and state[i-4][j+4] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1OpenFour += 1
-							else:
-								p2OpenFour += 1
-					#Open Four to the lower right
-					if i < 11 and i > 0:
-						if state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] and state[i-1][j-1] not in MARKERS and state[i+4][j+4] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1OpenFour += 1
-							else:
-								p2OpenFour += 1
+# 				#FIVES
+# 				#Five to the bottom
+# 				if i < 11:
+# 					if state[i][j] == state[i+1][j] == state[i+2][j] == state[i+3][j] == state[i+4][j]:
+# 						if state[i][j] == p1Marker:
+# 							p1Five +=1
+# 						else:
+# 							p2Five +=1
+# 				#Five to the right
+# 				if j < 11:
+# 					if state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+3] == state[i][j+4]:
+# 						if state[i][j] == p1Marker:
+# 							p1Five +=1
+# 						else:
+# 							p2Five +=1
+# 				#Five to the upper right
+# 				if i > 3 and j < 11:
+# 					if state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] == state[i-4][j+4]:
+# 						if state[i][j] == p1Marker:
+# 							p1Five +=1
+# 						else:
+# 							p2Five +=1
+# 				#Five to the lower right
+# 				if i < 11 and j < 11:
+# 					if state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] == state[i+4][j+4]:
+# 						if state[i][j] == p1Marker:
+# 							p1Five +=1
+# 						else:
+# 							p2Five +=1
+# 				#OPEN FOURS
+# 				if i > 0 and i < 11:
+# 					#Open Four to the bottom
+# 					if state[i][j] == state[i+1][j] == state[i+2][j] == state[i+3][j] and state[i-1][j] not in MARKERS and state[i+4][j] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1OpenFour += 1
+# 						else:
+# 							p2OpenFour += 1
+# 				if j < 11 and j > 0:
+# 					#Open Four to the right
+# 					if state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+3] and state[i][j-1] not in MARKERS and state[i][j+4] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1OpenFour += 1
+# 						else:
+# 							p2OpenFour += 1
+# 					#Open Four to the upper right
+# 					if i > 3 and i < 14:
+# 						if state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] and state[i+1][j-1] not in MARKERS and state[i-4][j+4] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1OpenFour += 1
+# 							else:
+# 								p2OpenFour += 1
+# 					#Open Four to the lower right
+# 					if i < 11 and i > 0:
+# 						if state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] and state[i-1][j-1] not in MARKERS and state[i+4][j+4] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1OpenFour += 1
+# 							else:
+# 								p2OpenFour += 1
 
-				#BROKEN OPEN FOURS
-				if i < 10 and i > 0:
-					#Broken Open Four to the bottom
-					if (state[i][j] == state[i+2][j] == state[i+3][j] == state[i+4][j] and state[i+1][j] not in MARKERS) or (state[i][j] == state[i+1][j] == state[i+3][j] == state[i+4][j] and state[i+2][j] not in MARKERS) or (state[i][j] == state[i+1][j] == state[i+2][j] == state[i+4][j] and state[i+3][j] not in MARKERS) and state[i-1][j] not in MARKERS and state[i+5][j] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1BOpenFour += 1
-						else:
-							p2BOpenFour += 1
-				if j < 10:
-					#Broken Open four to the right
-					if (state[i][j] == state[i][j+2] == state[i][j+3] == state[i][j+4] and state[i][j+1] not in MARKERS) or (state[i][j] == state[i][j+1] == state[i][j+3] == state[i][j+4] and state[i][j+2] not in MARKERS) or (state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+4] and state[i][j+3] not in MARKERS) and state[i][j-1] not in MARKERS and state[i][j+5] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1BOpenFour += 1
-						else:
-							p2BOpenFour += 1
-					#Broken Open four to the upper right
-					if i > 4 and i < 14:
-						if (state[i][j] == state[i-2][j+2] == state[i-3][j+3] == state[i-4][j+4] and state[i-1][j+1] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-3][j+3] == state[i-4][j+4] and state[i-2][j+2] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-4][j+4] and state[i-3][j+3] not in MARKERS) and state[i+1][j-1] not in MARKERS and state[i-5][j+5] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1BOpenFour += 1
-							else:
-								p2BOpenFour += 1
-					#Broken Open four to the lower right
-					if i < 10 and i > 0:
-						if (state[i][j] == state[i+2][j+2] == state[i+3][j+3] == state[i+4][j+4] and state[i+1][j+1] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+3][j+3] == state[i+4][j+4] and state[i+2][j+2] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+4][j+4] and state[i+3][j+3] not in MARKERS) and state[i-1][j-1] not in MARKERS and state[i+5][j+5] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1BOpenFour += 1
-							else:
-								p2BOpenFour += 1
+# 				#BROKEN OPEN FOURS
+# 				if i < 10 and i > 0:
+# 					#Broken Open Four to the bottom
+# 					if (state[i][j] == state[i+2][j] == state[i+3][j] == state[i+4][j] and state[i+1][j] not in MARKERS) or (state[i][j] == state[i+1][j] == state[i+3][j] == state[i+4][j] and state[i+2][j] not in MARKERS) or (state[i][j] == state[i+1][j] == state[i+2][j] == state[i+4][j] and state[i+3][j] not in MARKERS) and state[i-1][j] not in MARKERS and state[i+5][j] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1BOpenFour += 1
+# 						else:
+# 							p2BOpenFour += 1
+# 				if j < 10:
+# 					#Broken Open four to the right
+# 					if (state[i][j] == state[i][j+2] == state[i][j+3] == state[i][j+4] and state[i][j+1] not in MARKERS) or (state[i][j] == state[i][j+1] == state[i][j+3] == state[i][j+4] and state[i][j+2] not in MARKERS) or (state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+4] and state[i][j+3] not in MARKERS) and state[i][j-1] not in MARKERS and state[i][j+5] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1BOpenFour += 1
+# 						else:
+# 							p2BOpenFour += 1
+# 					#Broken Open four to the upper right
+# 					if i > 4 and i < 14:
+# 						if (state[i][j] == state[i-2][j+2] == state[i-3][j+3] == state[i-4][j+4] and state[i-1][j+1] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-3][j+3] == state[i-4][j+4] and state[i-2][j+2] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-4][j+4] and state[i-3][j+3] not in MARKERS) and state[i+1][j-1] not in MARKERS and state[i-5][j+5] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1BOpenFour += 1
+# 							else:
+# 								p2BOpenFour += 1
+# 					#Broken Open four to the lower right
+# 					if i < 10 and i > 0:
+# 						if (state[i][j] == state[i+2][j+2] == state[i+3][j+3] == state[i+4][j+4] and state[i+1][j+1] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+3][j+3] == state[i+4][j+4] and state[i+2][j+2] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+4][j+4] and state[i+3][j+3] not in MARKERS) and state[i-1][j-1] not in MARKERS and state[i+5][j+5] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1BOpenFour += 1
+# 							else:
+# 								p2BOpenFour += 1
 
-				#HALF OPEN FOURS
-				if i < 12:
-					#Half Open Four to the bottom
-					if state[i][j] == state[i+1][j] == state[i+2][j] == state[i+3][j]:
-						if i is 0:
-							if state[i+4][j] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenFour += 1
-								else:
-									p2HOpenFour += 1
-						if i is 11:
-							if state[i-1][j] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenFour += 1
-								else:
-									p2HOpenFour += 1
-						else:
-							if (state[i-1][j] not in MARKERS and state[i+4][j] in MARKERS) or (state[i-1][j] in MARKERS and state[i+4][j] not in MARKERS):
-								if state[i][j] == p1Marker:
-									p1HOpenFour += 1
-								else:
-									p2HOpenFour += 1
-				if j < 12:
-					#Half Open Four to the right
-					if state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+3]:
-						if j is 0:
-							if state[i][j+4] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenFour += 1
-								else:
-									p2HOpenFour += 1
-						if j is 11:
-							if state[i][j-1] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenFour += 1
-								else:
-									p2HOpenFour += 1
-						else:
-							if (state[i][j-1] not in MARKERS and state[i][j+4] in MARKERS) or (state[i][j-1] in MARKERS and state[i][j+4] not in MARKERS):
-								if state[i][j] == p1Marker:
-									p1HOpenFour += 1
-								else:
-									p2HOpenFour += 1
-					if i > 2:
-						#Half Open Four to the upper right
-						if state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3]:
-							if j is 0:
-								if i > 3:
-									if state[i-4][j+4] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
-							elif j is 11:
-								if i < 14:
-									if state[i+1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
-							elif i is 14:
-								if j < 11:
-									if state[i-4][j+4] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
-							elif i is 3:
-								if j > 0:
-									if state[i+1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
+# 				#HALF OPEN FOURS
+# 				if i < 12:
+# 					#Half Open Four to the bottom
+# 					if state[i][j] == state[i+1][j] == state[i+2][j] == state[i+3][j]:
+# 						if i is 0:
+# 							if state[i+4][j] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenFour += 1
+# 								else:
+# 									p2HOpenFour += 1
+# 						if i is 11:
+# 							if state[i-1][j] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenFour += 1
+# 								else:
+# 									p2HOpenFour += 1
+# 						else:
+# 							if (state[i-1][j] not in MARKERS and state[i+4][j] in MARKERS) or (state[i-1][j] in MARKERS and state[i+4][j] not in MARKERS):
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenFour += 1
+# 								else:
+# 									p2HOpenFour += 1
+# 				if j < 12:
+# 					#Half Open Four to the right
+# 					if state[i][j] == state[i][j+1] == state[i][j+2] == state[i][j+3]:
+# 						if j is 0:
+# 							if state[i][j+4] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenFour += 1
+# 								else:
+# 									p2HOpenFour += 1
+# 						if j is 11:
+# 							if state[i][j-1] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenFour += 1
+# 								else:
+# 									p2HOpenFour += 1
+# 						else:
+# 							if (state[i][j-1] not in MARKERS and state[i][j+4] in MARKERS) or (state[i][j-1] in MARKERS and state[i][j+4] not in MARKERS):
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenFour += 1
+# 								else:
+# 									p2HOpenFour += 1
+# 					if i > 2:
+# 						#Half Open Four to the upper right
+# 						if state[i][j] == state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3]:
+# 							if j is 0:
+# 								if i > 3:
+# 									if state[i-4][j+4] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
+# 							elif j is 11:
+# 								if i < 14:
+# 									if state[i+1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
+# 							elif i is 14:
+# 								if j < 11:
+# 									if state[i-4][j+4] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
+# 							elif i is 3:
+# 								if j > 0:
+# 									if state[i+1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
 
-							else:
-								if (state[i+1][j-1] not in MARKERS and state[i-4][j+4] in MARKERS) or (state[i+1][j-1] in MARKERS and state[i-4][j+4] not in MARKERS):
-									if state[i][j] == p1Marker:
-										p1HOpenFour += 1
-									else:
-										p2HOpenFour += 1
-					if i < 12:
-						#Half Open Four to the lower right
-						if state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3]:
-							if j is 0:
-								if i < 11:
-									if state[i+4][j+4] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
-							elif j is 11:
-								if i > 0:
-									if state[i-1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
-							elif i is 0:
-								if j < 11:
-									if state[i+4][j+4] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
-							elif i is 11:
-								if j > 0:
-									if state[i-1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenFour += 1
-										else:
-											p2HOpenFour += 1
+# 							else:
+# 								if (state[i+1][j-1] not in MARKERS and state[i-4][j+4] in MARKERS) or (state[i+1][j-1] in MARKERS and state[i-4][j+4] not in MARKERS):
+# 									if state[i][j] == p1Marker:
+# 										p1HOpenFour += 1
+# 									else:
+# 										p2HOpenFour += 1
+# 					if i < 12:
+# 						#Half Open Four to the lower right
+# 						if state[i][j] == state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3]:
+# 							if j is 0:
+# 								if i < 11:
+# 									if state[i+4][j+4] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
+# 							elif j is 11:
+# 								if i > 0:
+# 									if state[i-1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
+# 							elif i is 0:
+# 								if j < 11:
+# 									if state[i+4][j+4] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
+# 							elif i is 11:
+# 								if j > 0:
+# 									if state[i-1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenFour += 1
+# 										else:
+# 											p2HOpenFour += 1
 
-							else:
-								if (state[i-1][j-1] not in MARKERS and state[i+4][j+4] in MARKERS) or (state[i-1][j-1] in MARKERS and state[i+4][j+4] not in MARKERS):
-									if state[i][j] == p1Marker:
-										p1HOpenFour += 1
-									else:
-										p2HOpenFour += 1
+# 							else:
+# 								if (state[i-1][j-1] not in MARKERS and state[i+4][j+4] in MARKERS) or (state[i-1][j-1] in MARKERS and state[i+4][j+4] not in MARKERS):
+# 									if state[i][j] == p1Marker:
+# 										p1HOpenFour += 1
+# 									else:
+# 										p2HOpenFour += 1
 
-				#OPEN THREES
-				if i > 0 and i < 12:
-					#Open Three to the bottom
-					if state[i][j] == state[i+1][j] == state[i+2][j] and state[i-1][j] not in MARKERS and state[i+3][j] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1OpenThree += 1
-						else:
-							p2OpenThree += 1
-				if j < 12 and j > 0:
-					#Open Three to the right
-					if state[i][j] == state[i][j+1] == state[i][j+2] and state[i][j-1] not in MARKERS and state[i][j+3] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1OpenThree += 1
-						else:
-							p2OpenThree += 1
-					#Open Three to the upper right
-					if i > 2 and i < 14:
-						if state[i][j] == state[i-1][j+1] == state[i-2][j+2] and state[i+1][j-1] not in MARKERS and state[i-3][j+3] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1OpenThree += 1
-							else:
-								p2OpenThree += 1
-					#Open Three to the lower right
-					if i < 12 and i > 0:
-						if state[i][j] == state[i+1][j+1] == state[i+2][j+2] and state[i-1][j-1] not in MARKERS and state[i+3][j+3] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1OpenThree += 1
-							else:
-								p2OpenThree += 1
+# 				#OPEN THREES
+# 				if i > 0 and i < 12:
+# 					#Open Three to the bottom
+# 					if state[i][j] == state[i+1][j] == state[i+2][j] and state[i-1][j] not in MARKERS and state[i+3][j] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1OpenThree += 1
+# 						else:
+# 							p2OpenThree += 1
+# 				if j < 12 and j > 0:
+# 					#Open Three to the right
+# 					if state[i][j] == state[i][j+1] == state[i][j+2] and state[i][j-1] not in MARKERS and state[i][j+3] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1OpenThree += 1
+# 						else:
+# 							p2OpenThree += 1
+# 					#Open Three to the upper right
+# 					if i > 2 and i < 14:
+# 						if state[i][j] == state[i-1][j+1] == state[i-2][j+2] and state[i+1][j-1] not in MARKERS and state[i-3][j+3] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1OpenThree += 1
+# 							else:
+# 								p2OpenThree += 1
+# 					#Open Three to the lower right
+# 					if i < 12 and i > 0:
+# 						if state[i][j] == state[i+1][j+1] == state[i+2][j+2] and state[i-1][j-1] not in MARKERS and state[i+3][j+3] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1OpenThree += 1
+# 							else:
+# 								p2OpenThree += 1
 
-				#BROKEN OPEN THREES
-				if i < 11 and i > 0:
-					#Broken Open Three to the bottom
-					if (state[i][j] == state[i+2][j] == state[i+3][j] and state[i+1][j] not in MARKERS) or (state[i][j] == state[i+1][j] == state[i+3][j] and state[i+2][j] not in MARKERS) and state[i-1][j] not in MARKERS and state[i+4][j] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1BOpenThree += 1
-						else:
-							p2BOpenThree += 1
-				if j < 11 and j > 0:
-					#Broken Open Three to the right
-					if (state[i][j] == state[i][j+2] == state[i][j+3] and state[i][j+1] not in MARKERS) or (state[i][j] == state[i][j+1] == state[i][j+3] and state[i][j+2] not in MARKERS) and state[i][j-1] not in MARKERS and state[i][j+4] not in MARKERS:
-						if state[i][j] == p1Marker:
-							p1BOpenThree += 1
-						else:
-							p2BOpenThree += 1
-					#Broken Open Three to the upper right
-					if i > 3 and i < 14:
-						if (state[i][j] == state[i-2][j+2] == state[i-3][j+3] and state[i-1][j+1] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-3][j+3] and state[i-2][j+2] not in MARKERS) and state[i+1][j-1] not in MARKERS and state[i-4][j+4] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1BOpenThree += 1
-							else:
-								p2BOpenThree += 1
-					#Broken Open Three to the lower right
-					if i < 11 and i > 0:
-						if (state[i][j] == state[i+2][j+2] == state[i+3][j+3] and state[i+1][j+1] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+3][j+3] and state[i+2][j+2] not in MARKERS) and state[i-1][j-1] not in MARKERS and state[i+4][j+4] not in MARKERS:
-							if state[i][j] == p1Marker:
-								p1BOpenThree += 1
-							else:
-								p2BOpenThree += 1
+# 				#BROKEN OPEN THREES
+# 				if i < 11 and i > 0:
+# 					#Broken Open Three to the bottom
+# 					if (state[i][j] == state[i+2][j] == state[i+3][j] and state[i+1][j] not in MARKERS) or (state[i][j] == state[i+1][j] == state[i+3][j] and state[i+2][j] not in MARKERS) and state[i-1][j] not in MARKERS and state[i+4][j] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1BOpenThree += 1
+# 						else:
+# 							p2BOpenThree += 1
+# 				if j < 11 and j > 0:
+# 					#Broken Open Three to the right
+# 					if (state[i][j] == state[i][j+2] == state[i][j+3] and state[i][j+1] not in MARKERS) or (state[i][j] == state[i][j+1] == state[i][j+3] and state[i][j+2] not in MARKERS) and state[i][j-1] not in MARKERS and state[i][j+4] not in MARKERS:
+# 						if state[i][j] == p1Marker:
+# 							p1BOpenThree += 1
+# 						else:
+# 							p2BOpenThree += 1
+# 					#Broken Open Three to the upper right
+# 					if i > 3 and i < 14:
+# 						if (state[i][j] == state[i-2][j+2] == state[i-3][j+3] and state[i-1][j+1] not in MARKERS) or (state[i][j] == state[i-1][j+1] == state[i-3][j+3] and state[i-2][j+2] not in MARKERS) and state[i+1][j-1] not in MARKERS and state[i-4][j+4] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1BOpenThree += 1
+# 							else:
+# 								p2BOpenThree += 1
+# 					#Broken Open Three to the lower right
+# 					if i < 11 and i > 0:
+# 						if (state[i][j] == state[i+2][j+2] == state[i+3][j+3] and state[i+1][j+1] not in MARKERS) or (state[i][j] == state[i+1][j+1] == state[i+3][j+3] and state[i+2][j+2] not in MARKERS) and state[i-1][j-1] not in MARKERS and state[i+4][j+4] not in MARKERS:
+# 							if state[i][j] == p1Marker:
+# 								p1BOpenThree += 1
+# 							else:
+# 								p2BOpenThree += 1
 
-				#HALF OPEN THREES
-				if i < 13:
-					#Half Open Three to the bottom
-					if state[i][j] == state[i+1][j] == state[i+2][j]:
-						if i is 0:
-							if state[i+3][j] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenThree += 1
-								else:
-									p2HOpenThree += 1
-						if i is 12:
-							if state[i-1][j] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenThree += 1
-								else:
-									p2HOpenThree += 1
-						else:
-							if (state[i-1][j] not in MARKERS and state[i+3][j] in MARKERS) or (state[i-1][j] in MARKERS and state[i+3][j] not in MARKERS):
-								if state[i][j] == p1Marker:
-									p1HOpenThree += 1
-								else:
-									p2HOpenThree += 1
-				if j < 13:
-					#Half Open Three to the right
-					if state[i][j] == state[i][j+1] == state[i][j+2]:
-						if j is 0:
-							if state[i][j+3] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenThree += 1
-								else:
-									p2HOpenThree += 1
-						if j is 12:
-							if state[i][j-1] not in MARKERS:
-								if state[i][j] == p1Marker:
-									p1HOpenThree += 1
-								else:
-									p2HOpenThree += 1
-						else:
-							if (state[i][j-1] not in MARKERS and state[i][j+3] in MARKERS) or (state[i][j-1] in MARKERS and state[i][j+3] not in MARKERS):
-								if state[i][j] == p1Marker:
-									p1HOpenThree += 1
-								else:
-									p2HOpenThree += 1
-					if i > 1:
-						#Half Open Three to the upper right
-						if state[i][j] == state[i-1][j+1] == state[i-2][j+2]:
-							if j is 0:
-								if i > 2:
-									if state[i-3][j+3] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							elif j is 12:
-								if i < 14:
-									if state[i+1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							elif i is 14:
-								if j < 12:
-									if state[i-3][j+3] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							elif i is 2:
-								if j > 0:
-									if state[i+1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							else:
-								if (state[i+1][j-1] not in MARKERS and state[i-3][j+3] in MARKERS) or (state[i+1][j-1] in MARKERS and state[i-3][j+3] not in MARKERS):
-									if state[i][j] == p1Marker:
-										p1HOpenThree += 1
-									else:
-										p2HOpenThree += 1
-					if i < 13:
-						#Half Open Three to the lower right
-						if state[i][j] == state[i+1][j+1] == state[i+2][j+2]:
-							if j is 0:
-								if i < 12:
-									if state[i+3][j+3] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							elif j is 12:
-								if i > 0:
-									if state[i-1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							elif i is 0:
-								if j < 12:
-									if state[i+3][j+3] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							elif i is 12:
-								if j > 0:
-									if state[i-1][j-1] not in MARKERS:
-										if state[i][j] == p1Marker:
-											p1HOpenThree += 1
-										else:
-											p2HOpenThree += 1
-							else:
-								if (state[i-1][j-1] not in MARKERS and state[i+3][j+3] in MARKERS) or (state[i-1][j-1] in MARKERS and state[i+3][j+3] not in MARKERS):
-									if state[i][j] == p1Marker:
-										p1HOpenThree += 1
-									else:
-										p2HOpenThree += 1
-				#OPEN TWOS
-				#Open Two to the bottom
-				if i > 0 and i < 13:
-					if state[i][j] is state[i+1][j] and state[i-1][j] not in MARKERS and state[i+2][j] not in MARKERS:
-						if state[i][j] is p1Marker:
-							p1OpenTwo += 1
-						else:
-							p2OpenTwo += 1
-					#Open Two to the lower right
-					if j > 0 and j < 13:
-						if state[i][j] is state[i+1][j+1] and state[i-1][j-1] not in MARKERS and state[i+2][j+2] not in MARKERS:
-							if state[i][j] is p1Marker:
-								p1OpenTwo += 1
-							else:
-								p2OpenTwo += 1
-				#Open Two to the right
-				if j > 0 and j < 13:
-					if state[i][j] is state[i][j+1] and state[i][j-1] not in MARKERS and state[i][j+2] not in MARKERS:
-						if state[i][j] is p1Marker:
-							p1OpenTwo += 1
-						else:
-							p2OpenTwo += 1
-					#Open Two to the upper right
-					if i > 1 and i < 14:
-						if state[i][j] is state[i-1][j+1] and state[i+1][j+1] not in MARKERS and state[i-2][j+2] not in MARKERS:
-							if state[i][j] is p1Marker:
-								p1OpenTwo += 1
-							else:
-								p2OpenTwo += 1
+# 				#HALF OPEN THREES
+# 				if i < 13:
+# 					#Half Open Three to the bottom
+# 					if state[i][j] == state[i+1][j] == state[i+2][j]:
+# 						if i is 0:
+# 							if state[i+3][j] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenThree += 1
+# 								else:
+# 									p2HOpenThree += 1
+# 						if i is 12:
+# 							if state[i-1][j] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenThree += 1
+# 								else:
+# 									p2HOpenThree += 1
+# 						else:
+# 							if (state[i-1][j] not in MARKERS and state[i+3][j] in MARKERS) or (state[i-1][j] in MARKERS and state[i+3][j] not in MARKERS):
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenThree += 1
+# 								else:
+# 									p2HOpenThree += 1
+# 				if j < 13:
+# 					#Half Open Three to the right
+# 					if state[i][j] == state[i][j+1] == state[i][j+2]:
+# 						if j is 0:
+# 							if state[i][j+3] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenThree += 1
+# 								else:
+# 									p2HOpenThree += 1
+# 						if j is 12:
+# 							if state[i][j-1] not in MARKERS:
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenThree += 1
+# 								else:
+# 									p2HOpenThree += 1
+# 						else:
+# 							if (state[i][j-1] not in MARKERS and state[i][j+3] in MARKERS) or (state[i][j-1] in MARKERS and state[i][j+3] not in MARKERS):
+# 								if state[i][j] == p1Marker:
+# 									p1HOpenThree += 1
+# 								else:
+# 									p2HOpenThree += 1
+# 					if i > 1:
+# 						#Half Open Three to the upper right
+# 						if state[i][j] == state[i-1][j+1] == state[i-2][j+2]:
+# 							if j is 0:
+# 								if i > 2:
+# 									if state[i-3][j+3] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							elif j is 12:
+# 								if i < 14:
+# 									if state[i+1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							elif i is 14:
+# 								if j < 12:
+# 									if state[i-3][j+3] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							elif i is 2:
+# 								if j > 0:
+# 									if state[i+1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							else:
+# 								if (state[i+1][j-1] not in MARKERS and state[i-3][j+3] in MARKERS) or (state[i+1][j-1] in MARKERS and state[i-3][j+3] not in MARKERS):
+# 									if state[i][j] == p1Marker:
+# 										p1HOpenThree += 1
+# 									else:
+# 										p2HOpenThree += 1
+# 					if i < 13:
+# 						#Half Open Three to the lower right
+# 						if state[i][j] == state[i+1][j+1] == state[i+2][j+2]:
+# 							if j is 0:
+# 								if i < 12:
+# 									if state[i+3][j+3] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							elif j is 12:
+# 								if i > 0:
+# 									if state[i-1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							elif i is 0:
+# 								if j < 12:
+# 									if state[i+3][j+3] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							elif i is 12:
+# 								if j > 0:
+# 									if state[i-1][j-1] not in MARKERS:
+# 										if state[i][j] == p1Marker:
+# 											p1HOpenThree += 1
+# 										else:
+# 											p2HOpenThree += 1
+# 							else:
+# 								if (state[i-1][j-1] not in MARKERS and state[i+3][j+3] in MARKERS) or (state[i-1][j-1] in MARKERS and state[i+3][j+3] not in MARKERS):
+# 									if state[i][j] == p1Marker:
+# 										p1HOpenThree += 1
+# 									else:
+# 										p2HOpenThree += 1
+# 				#OPEN TWOS
+# 				#Open Two to the bottom
+# 				if i > 0 and i < 13:
+# 					if state[i][j] is state[i+1][j] and state[i-1][j] not in MARKERS and state[i+2][j] not in MARKERS:
+# 						if state[i][j] is p1Marker:
+# 							p1OpenTwo += 1
+# 						else:
+# 							p2OpenTwo += 1
+# 					#Open Two to the lower right
+# 					if j > 0 and j < 13:
+# 						if state[i][j] is state[i+1][j+1] and state[i-1][j-1] not in MARKERS and state[i+2][j+2] not in MARKERS:
+# 							if state[i][j] is p1Marker:
+# 								p1OpenTwo += 1
+# 							else:
+# 								p2OpenTwo += 1
+# 				#Open Two to the right
+# 				if j > 0 and j < 13:
+# 					if state[i][j] is state[i][j+1] and state[i][j-1] not in MARKERS and state[i][j+2] not in MARKERS:
+# 						if state[i][j] is p1Marker:
+# 							p1OpenTwo += 1
+# 						else:
+# 							p2OpenTwo += 1
+# 					#Open Two to the upper right
+# 					if i > 1 and i < 14:
+# 						if state[i][j] is state[i-1][j+1] and state[i+1][j+1] not in MARKERS and state[i-2][j+2] not in MARKERS:
+# 							if state[i][j] is p1Marker:
+# 								p1OpenTwo += 1
+# 							else:
+# 								p2OpenTwo += 1
 
-	dict = {}
-	dict['p1Five'] = p1Five
-	dict['p2Five'] = p2Five
-	dict['p1OpenFour'] = p1OpenFour
-	dict['p2OpenFour'] = p2OpenFour
-	dict['p1HOpenFour'] = p1HOpenFour
-	dict['p2HOpenFour'] = p2HOpenFour
-	dict['p1BOpenFour'] = p1BOpenFour
-	dict['p2BOpenFour'] = p2BOpenFour
-	dict['p1OpenThree'] = p1OpenThree
-	dict['p2OpenThree'] = p2OpenThree
-	dict['p1HOpenThree'] = p1HOpenThree
-	dict['p2HOpenThree'] = p2HOpenThree
-	dict['p1BOpenThree'] = p1BOpenThree
-	dict['p2BOpenThree'] = p2BOpenThree
-	dict['p1OpenTwo'] = p1OpenTwo
-	dict['p2OpenTwo'] = p2OpenTwo
+# 	dict = {}
+# 	dict['p1Five'] = p1Five
+# 	dict['p2Five'] = p2Five
+# 	dict['p1OpenFour'] = p1OpenFour
+# 	dict['p2OpenFour'] = p2OpenFour
+# 	dict['p1HOpenFour'] = p1HOpenFour
+# 	dict['p2HOpenFour'] = p2HOpenFour
+# 	dict['p1BOpenFour'] = p1BOpenFour
+# 	dict['p2BOpenFour'] = p2BOpenFour
+# 	dict['p1OpenThree'] = p1OpenThree
+# 	dict['p2OpenThree'] = p2OpenThree
+# 	dict['p1HOpenThree'] = p1HOpenThree
+# 	dict['p2HOpenThree'] = p2HOpenThree
+# 	dict['p1BOpenThree'] = p1BOpenThree
+# 	dict['p2BOpenThree'] = p2BOpenThree
+# 	dict['p1OpenTwo'] = p1OpenTwo
+# 	dict['p2OpenTwo'] = p2OpenTwo
 
-	return dict
+# 	return dict
 
 class Agent(object):
 

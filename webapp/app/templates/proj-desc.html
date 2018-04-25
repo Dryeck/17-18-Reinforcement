@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block head %}
+{{super()}}
+{% endblock %}
+{% block content %}
+<div class="container" style="height:120px; margin-top:20px">
+	<div class="row">
+		<div class="col-md-2"></div>
+		<div class="col-md-8">
+			<p class="box">
+			Our goal is to understand and implement reinforcement learning when applied to a board game. Reinforcement learning is a type of artificial intelligence where the AI agent learns by interacting with its environment and is not supplied with training data. The AI agent learns by evaluating its current state and choosing an action that will maximize a numerical reward signal. 
+			</p>
+		</div>
+		<div class="col-md-2"></div>
+	</div>
+</div>
+<div class="container" style="margin-bottom:20px">
+	<div class="row justify-content-around">
+		<div class="col-md-3 box">
+			<p>
+				Two distinguishing features of reinforcement learning are trial and error search and delayed reward. Trial and error search means that the agent discovers which actions yield the most reward by testing various possibilities. These actions not only affect the agent's immediate reward, but also delayed reward which encourages the agent to think more long-term. The agent must balance between greedy (based on the policy) and exploratory (random) moves. The greedy move guarantees a good move in the short term but the exploratory move might allow the agent to learn more and be helpful long-term. 
+			</p>
+		</div>
+		<div class="col-md-3 box">
+			<p>
+				There are three main elements of a reinforcement learning problem: the policy, reward function, and value function. The policy defines a mapping from the perceived environment state to the best action to take within those states. The reward function defines the goal of the problem and maps each perceived state and action pair to a corresponding reward. The desirability of the state is identified by this reward, which is maximized by the agent in the long run. The value function specifies the total rewards expected at each state. When making a decision, the agent should be more concerned with values rather than immediate rewards. 
+			</p>
+		</div>
+		<div class="col-md-3 box">
+			<p>
+				We applied reinforcement learning to the board game Gomoku. Gomoku is played by two players on a 19x19 board and the objective of this game is get five pieces in a row before your opponent. The large game board meant that we could not simply map each state with its best possible action and had to instead devise an approximation value function. In the fall semester we focused on developing this function in Python3. In the spring semester we moved on to solving this problem via deep reinforcement learning which employs the use of neural nets and the TensorFlow library.  
+			</p>
+		</div>
+	</div>
+</div>
+{% endblock %}

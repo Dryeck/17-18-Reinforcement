@@ -12,8 +12,6 @@
   <input id="sub" type="submit" value="Submit" style="display:none">
 </form>
 
-<h3 style="text-align: center"> Gomoku </h3>
-
 <table id="layout">
   <tbody>
     <tr>
@@ -291,12 +289,13 @@
   </div>
 </form>
 
+<!-- JavaScript for this page needs to be in this location due to the need to inject the Flask board variable  -->
 <script>
   board = "{{board}}"
 
   var colorDict = {
-    "X":"red",
-    "O":"blue"
+    "X":"#ff2f00e0",
+    "O":"#352f92"
   };
 
   function play(x, y) {
@@ -334,4 +333,5 @@
     }
   }
 </script>
+
 {% endblock %}

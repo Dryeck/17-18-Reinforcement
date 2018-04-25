@@ -151,3 +151,16 @@ div.linkHome a {
 	padding: 7px 15px;
 	font-size: 20px
 }
+
+body {
+	background-image: url("../images/circles-light.png");
+}
+
+.box {
+	color:white;
+	border-radius:10px;
+	font-size:14px;
+	background: rgba(0,0,0,.8);
+	margin-right:30px;
+	padding:10px;
+}
