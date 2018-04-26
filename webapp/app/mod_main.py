@@ -15,12 +15,31 @@ app = Flask(__name__)
 
 @app.route('/home', methods=['GET', 'POST'])
 def home():
-	#If the page is loaded for the first time (not a move in the game), then end here and render the page
+	#If the page is loaded for the first time (not a move in the game), 
+	#then end here, have agent move, and render the page
 	if request.method == 'GET':
+		player = Agent.Human('x')
+		model_file = "current_policy_5000.model"
+		model_file2 = "current_policy_10_10_v2_1300.model"
+		best_policy = PolicyValueNet(15, 15, model_file = model_file)
+		best_policy2 = PolicyValueNet(10, 10, pooling=False, model_file = model_file2)
+
+		riAgent = mcts_alphaZero.MCTSPlayer('O', best_policy.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
+		riAgent2 = mcts_alphaZero.MCTSPlayer('O', best_policy2.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
+
+		game = Agent.Game(player, riAgent, 15)
+		game2 = Agent.Game(player, riAgent2, 10)
+
+		status, moveX, moveY = game.makeMove(riAgent, 0, 0)
+		status2, moveX2, moveY2 = game2.makeMove(riAgent2, 0, 0)
+
+		boardState = "(" + str(moveX) + "," + str(moveY) + ")O;"
+		boardState2 = "(" + str(moveX) + "," + str(moveY) + ")O;"
+
 		return render_template(
 			'home.html',
-			board="",
-			board2=""
+			board=boardState,
+			board2=boardState2
 		)
 
 	#Else, if a move is received:
@@ -45,7 +64,7 @@ def home():
 
 		else:
 			#File to load neural network agent from
-			model_file = "current_policy_10_10_v2_1100.model"
+			model_file = "current_policy_10_10_v2_1300.model"
 			best_policy = PolicyValueNet(10, 10, pooling=False, model_file = model_file)
 			#Initialize the agent
 			riAgent = mcts_alphaZero.MCTSPlayer('O', best_policy.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
