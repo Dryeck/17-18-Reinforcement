@@ -10,11 +10,12 @@ import copy
 import ast
 import random
 import numpy as np
+from pprint import pprint
 
 class Board(object):
 
-	def __init__(self):
-		self.dim = 15
+	def __init__(self, size):
+		self.dim = size
 		self.state = []
 		self.newBoard()
 		self.inARow = 5
@@ -291,8 +292,8 @@ def convertBoard(oldBoard, lastX, lastY):
 
 class Game(object):
 
-	def __init__(self, p1, p2):
-		self.board = Board()
+	def __init__(self, p1, p2, size):
+		self.board = Board(size)
 		self.p1 = p1
 		self.p2 = p2
 		self.lastMove = self.p2
@@ -306,6 +307,7 @@ class Game(object):
 			self.board.place(player.marker, lastX, lastY)
 		else:
 			alphaB = convertBoard(self.board, lastX, lastY)
+			pprint(vars(alphaB))
 			location = player.chooseMove(alphaB)
 			x = location % self.board.dim
 			y = (int)(self.board.dim - 1 - ((location - x) / self.board.dim))

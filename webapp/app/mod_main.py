@@ -15,29 +15,43 @@ app = Flask(__name__)
 
 @app.route('/home', methods=['GET', 'POST'])
 def home():
-	#Initialize human player
-	player = Agent.Human('X')
-	#File to load neural network agent from
-	model_file = "current_policy_5000.model"
-
-	best_policy = PolicyValueNet(15, 15, model_file = model_file)
-
-	#Initialize the agent
-	riAgent = mcts_alphaZero.MCTSPlayer('O', best_policy.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
-	#Create a game between the human and the agent
-	game = Agent.Game(player, riAgent)
-
 	#If the page is loaded for the first time (not a move in the game), then end here and render the page
 	if request.method == 'GET':
 		return render_template(
 			'home.html',
-			board=""
+			board="",
+			board2=""
 		)
 
 	#Else, if a move is received:
 	elif request.method == 'POST':
+
+		#Initialize human player
+		player = Agent.Human('X')
 		#Receive the board state (where pieces are on the board), received during the page request
-		boardState = request.form['board']
+		boardLabel = request.form['boardLabel']
+		board = request.form['board']
+		board2 = request.form['board2']
+
+		if boardLabel == "board":
+			#File to load neural network agent from
+			model_file = "current_policy_5000.model"
+			best_policy = PolicyValueNet(15, 15, model_file = model_file)
+			#Initialize the agent
+			riAgent = mcts_alphaZero.MCTSPlayer('O', best_policy.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
+			boardState = board
+			#Create a game between the human and the agent
+			game = Agent.Game(player, riAgent, 15)
+
+		else:
+			#File to load neural network agent from
+			model_file = "current_policy_10_10_v2_1100.model"
+			best_policy = PolicyValueNet(10, 10, pooling=False, model_file = model_file)
+			#Initialize the agent
+			riAgent = mcts_alphaZero.MCTSPlayer('O', best_policy.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
+			boardState = board2
+			#Create a game between the human and the agent
+			game = Agent.Game(player, riAgent, 10)
 
 		#Split the board into moves; parse them, and place them onto the board for the game created above
 		moves = boardState.split(";")
@@ -45,7 +59,6 @@ def home():
 			move = moves[i].split(")")[0].split("(")[1].split(",")
 			playerSymbol = moves[i].split(")")[1]
 			x = int(move[0])
-			print(str(type(move[1])))
 			y = int(float(move[1]))
 			game.board.place(playerSymbol, x, y)
 
@@ -56,31 +69,62 @@ def home():
 		y = int(lastMove[1])
 		status, moveX, moveY = game.makeMove(player, x, y)
 
+
 		#If the game ended, end here and render with a 'you win' message
 		if status is not "False":
-			return render_template(
-				'home.html',
-				board=boardState,
-				outcome=status
-		)
+			if boardLabel == "board":
+				return render_template(
+					'home.html',
+					board=boardState,
+					board2=board2,
+					outcome=status
+			)
+			else:
+				return render_template(
+					'home.html',
+					board=board,
+					board2=boardState,
+					outcome=status
+			)
 
 		#Agent make move, add to boardState
-		status, moveX, moveY = game.makeMove(riAgent, x, y)
+		if boardLabel == "board":
+			status, moveX, moveY = game.makeMove(riAgent, x, y)
+		else:
+			status, moveX, moveY = game.makeMove(riAgent, x, y)
 		boardState += "(" + str(moveX) + "," + str(moveY) + ")O;"
 
 		#If the agent wins, end here and render with a 'you lose' message
 		if status is not "False":
+			if boardLabel == "board":
+				return render_template(
+					'home.html',
+					board=boardState,
+					board2=board2,
+					outcome=status
+			)
+			else:
+				return render_template(
+					'home.html',
+					board=board,
+					board2=boardState,
+					outcome=status
+			)
+
+		#Render the board state
+		if boardLabel == "board":
 			return render_template(
 				'home.html',
 				board=boardState,
+				board2=board2,
 				outcome=status
 		)
-
-		#Render the board state
-		return render_template(
-			'home.html',
-			board=boardState,
-			outcome="None"
+		else:
+			return render_template(
+				'home.html',
+				board=board,
+				board2=boardState,
+				outcome=status
 		)
 
 @app.route('/projdesc', methods=['GET'])

@@ -31,7 +31,8 @@ import pickle
 
 class PolicyValueNet():
     """policy-value network """
-    def __init__(self, board_width, board_height, model_file=None):
+    def __init__(self, board_width, board_height, pooling=True, model_file=None):
+        self.pooling = pooling
         self.board_width = board_width
         self.board_height = board_height 
         self.l2_const = 1e-4  # coef of l2 penalty 
@@ -50,7 +51,8 @@ class PolicyValueNet():
         network = Conv2D(filters=32, kernel_size=(3, 3), padding="same", data_format="channels_first", activation="relu", kernel_regularizer=l2(self.l2_const))(network)
         network = Conv2D(filters=64, kernel_size=(3, 3), padding="same", data_format="channels_first", activation="relu", kernel_regularizer=l2(self.l2_const))(network)
         network = Conv2D(filters=128, kernel_size=(3, 3), padding="same", data_format="channels_first", activation="relu", kernel_regularizer=l2(self.l2_const))(network)
-        network = MaxPooling2D(pool_size=(2,2), padding="same", data_format="channels_first")(network)
+        if self.pooling:
+            network = MaxPooling2D(pool_size=(2,2), padding="same", data_format="channels_first")(network)
         # action policy layers
         policy_net = Conv2D(filters=4, kernel_size=(1, 1), data_format="channels_first", activation="relu", kernel_regularizer=l2(self.l2_const))(network)
         policy_net = Flatten()(policy_net)
