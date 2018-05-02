@@ -20,7 +20,7 @@ def home():
 	if request.method == 'GET':
 		player = Agent.Human('x')
 		model_file = "current_policy_5000.model"
-		model_file2 = "current_policy_10_10_v2_1300.model"
+		model_file2 = "current_policy_10_10_v2_2400.model"
 		best_policy = PolicyValueNet(15, 15, model_file = model_file)
 		best_policy2 = PolicyValueNet(10, 10, pooling=False, model_file = model_file2)
 
@@ -64,7 +64,7 @@ def home():
 
 		else:
 			#File to load neural network agent from
-			model_file = "current_policy_10_10_v2_1300.model"
+			model_file = "current_policy_10_10_v2_2400.model"
 			best_policy = PolicyValueNet(10, 10, pooling=False, model_file = model_file)
 			#Initialize the agent
 			riAgent = mcts_alphaZero.MCTSPlayer('O', best_policy.policy_value_fn, c_puct=5, n_playout=400)  # set larger n_playout for better performance
